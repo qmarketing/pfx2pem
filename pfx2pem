@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#
+#   pfx2pem
+#
+# A small tool to convert pfx files to pem files. This tool
+# does also works with directories and converts all pfx files
+# in a directory to pem files in a newly created pem-folder.
+#
+# (c) 2019 Q:marketing AG
+
+
+# convert a single file to pem encoding.
+#
+# :param pfx_file   The file to convert
+# :param output_dir The directory for the output of the file
+convert_pfx_to_pem() {
+    declare pfx_file="$1" output_dir="$2"
+
+    # create the file name for the pem file
+    local pem_file="$( echo -n "$pfx_file" | sed -re 's/pfx$/pem/g' )"
+
+    # convert the file
+    openssl pkcs12 \
+        -in "$pfx_file" \
+        -out "$output_dir$pem_file" \
+        -passin pass: \
+        -nodes > /dev/null
+}
+
+
+# convert all pfx files in a directory into pem certificates in
+# a newly created pem folder.
+#
+# :param directory The directory to process
+process_directory() {
+    declare directory="$1"
+
+    # enter the directory by pushing it onto the directory stack
+    pushd "$directory" > /dev/null
+
+    # get the file names
+    local pfx_names="$( ls -AF . | grep -e ".*.pfx" )"
+
+    # create a directory for the pem certificates
+    mkdir -p pem
+
+    # iterate through the pfx files
+    while read -r pfx_file; do
+        printf ":: Converting $directory/$pfx_file\n"
+
+        # convert the file to a pem encoded file
+        convert_pfx_to_pem "$pfx_file" "./pem/"
+    done < <( echo "$pfx_names" )
+
+    # leave the directory and go into the previous one
+    popd > /dev/null
+}
+
+
+# main function and entrypoint
+#
+# :param directory The directory or file to process
+main() {
+    declare directory="$1"
+
+    # if no directory is given...
+    if [[ "$directory" = "" ]]; then
+        # ...print an error message...
+        printf "Usage: pfx2pem [directory]\n"
+
+        # ...and exit with an error code
+        exit -1
+    fi
+
+    # if the given directory is a file...
+    if [[ -f "$directory" ]]; then
+        printf ":: Converting $directory\n"
+
+        # ...convert it directly...
+        convert_pfx_to_pem "$directory" ""
+
+        # ...and exit
+        exit 0
+    fi
+
+    # process the given directory
+    process_directory "$directory"
+}
+
+# fail fast
+set -eo pipefail
+
+# run the main function with script arguments
+main "$@"
